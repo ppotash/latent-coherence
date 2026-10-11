@@ -37,7 +37,7 @@ _SKIP = re.compile(r"\b(not both|neither|than|same|older|younger|earlier|later|f
 
 
 def select_claims(hover_json: str | Path, n: int, seed: int = 0, hops=(2, 3, 4)) -> list[dict]:
-    data = json.loads(Path(hover_json).read_text())
+    data = json.loads(Path(hover_json).read_text(encoding="utf-8"))
     gold_claims = {g["claim"] for g in GOLD.values()}
     pool = [x for x in data
             if x["num_hops"] in hops and len(x["claim"]) <= 320

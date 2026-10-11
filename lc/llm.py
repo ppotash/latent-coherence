@@ -27,7 +27,7 @@ class LLM:
         self.max_retries = max_retries
         self.cache: dict[str, dict] = {}
         if self.cache_path.exists():
-            for line in self.cache_path.read_text().splitlines():
+            for line in self.cache_path.read_text(encoding="utf-8").splitlines():
                 if line.strip():
                     rec = json.loads(line)
                     self.cache[rec["key"]] = rec["output"]
@@ -43,7 +43,7 @@ class LLM:
     async def _append(self, key, output):
         async with self._lock:
             self.cache[key] = output
-            with self.cache_path.open("a") as f:
+            with self.cache_path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps({"key": key, "model": self.model, "output": output}, ensure_ascii=False) + "\n")
 
     async def json_call(self, key: str, prompt: str, schema) -> dict | None:
