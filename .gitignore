@@ -1,3 +1,8 @@
+# regenerable prompt exports
+data/*prompts*.jsonl
+# Gemini call caches (large, resumable, not needed by users)
+data/*.cache/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
