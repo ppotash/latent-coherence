@@ -2,7 +2,7 @@
 
 Backends
 --------
-gemini   : google-genai SDK; needs GEMINI_API_KEY (or GOOGLE_API_KEY) in the environment
+gemini   : google-genai SDK; needs GOOGLE_API_KEY (or GEMINI_API_KEY) in the environment or .env
 fixture  : returns canned outputs from a dict {key: output}; used for offline tests
 
 Every call is keyed; results are appended to a JSONL cache so a crashed or interrupted run
@@ -35,9 +35,9 @@ class LLM:
         self._client = None
         if backend == "gemini":
             from google import genai
-            key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+            key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
             if not key:
-                raise SystemExit("Set GEMINI_API_KEY (or GOOGLE_API_KEY) to use the gemini backend.")
+                raise SystemExit("Set GOOGLE_API_KEY in .env (or the environment) to use the gemini backend.")
             self._client = genai.Client(api_key=key)
 
     async def _append(self, key, output):

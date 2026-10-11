@@ -21,6 +21,9 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lc.schema import write_jsonl, read_jsonl, render_prompts, item_from_dict  # noqa: E402
+from lc.env import load_env  # noqa: E402
+
+load_env(Path(__file__).resolve().parent / ".env")
 
 
 def cmd_synth(a):
@@ -141,8 +144,8 @@ def main():
     s = sp.add_parser("hover-process"); s.set_defaults(fn=cmd_hover_process)
     s.add_argument("--candidates", default="data/hover_candidates.jsonl")
     s.add_argument("--backend", default="gemini", choices=["gemini", "fixture"])
-    s.add_argument("--dec-model", default="gemini-2.5-flash", help="set to the strongest Gemini model you have")
-    s.add_argument("--ver-model", default="gemini-2.5-pro", help="ideally stronger than / different from --dec-model")
+    s.add_argument("--dec-model", default="gemini-3.8-flash")
+    s.add_argument("--ver-model", default="gemini-3.8-flash", help="verifier; a different/stronger model is a plus")
     s.add_argument("--concurrency", type=int, default=16)
     s.add_argument("--limit", type=int, default=0)
     s.add_argument("--out", default="data/hover_processed.jsonl")
