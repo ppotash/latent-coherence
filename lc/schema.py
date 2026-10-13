@@ -141,6 +141,10 @@ def render_prompts(item: Item | dict) -> list[dict]:
                 "framing": fr,
                 "paraphrase": i,
                 "prompt_numeric": head + question + "\n\n" + NUMERIC_SUFFIX,
+                # the same prompt split at the item boundary: `prefix` is identical for every
+                # query of an item (cacheable), `question` is the query-specific tail
+                "prefix": head,
+                "question": question + "\n\n" + NUMERIC_SUFFIX,
                 "prompt_yesno": yesno,
                 "truth": q.truth,
             })

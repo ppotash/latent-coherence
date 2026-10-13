@@ -48,7 +48,7 @@ def cmd_hover_select(a):
 
 def cmd_hover_process(a):
     from lc.llm import LLM
-    from lc.hover import run_decompose_verify
+    from lc.hover import run_decompose_verify, dec_key, ver_key
     from lc.hover_gold import GOLD
     claims = read_jsonl(a.candidates)
     if a.limit:
@@ -59,8 +59,8 @@ def cmd_hover_process(a):
         for c in claims:
             for g in GOLD.values():
                 if g["claim"] == c["claim"]:
-                    fixture[f"dec::{c['uid']}"] = g["output"]
-                    fixture[f"ver::{c['uid']}"] = {"conjunction_equivalent": True, "subclaims_independent": True,
+                    fixture[dec_key(c["uid"])] = g["output"]
+                    fixture[ver_key(c["uid"], g["output"])] = {"conjunction_equivalent": True, "subclaims_independent": True,
                                                    "negations_exact": True, "fully_fictional_and_consistent": True,
                                                    "self_contained": True, "issues": "", "passed": True}
     cache = Path(a.out).with_suffix(".cache")
@@ -77,7 +77,18 @@ def cmd_hover_process(a):
 
 def cmd_hover_build(a):
     from lc.hover import build_hover_item
-    recs = [r for r in read_jsonl(a.processed) if r.get("accepted")]
+    from lc.hover_gold import GOLD
+    gold_claims = {g["claim"] for g in GOLD.values()}   # few-shot claims: the model saw the answer
+    recs = [r for r in read_jsonl(a.processed) if r.get("accepted") and r["claim"] not in gold_claims]
+    if a.require_crossver:
+        n0 = len(recs)
+        recs = [r for r in recs if (r.get("crossver") or {}).get("passed")]
+        print(f"dropped {n0 - len(recs)} claims without a passing cross-verification")
+    if a.drop_similar_names:
+        from lc.hover import similar_name_pairs
+        n0 = len(recs)
+        recs = [r for r in recs if not similar_name_pairs(r["decomposition"])]
+        print(f"dropped {n0 - len(recs)} claims with near-identical entity names")
     rng = np.random.default_rng(a.seed)
     items, idx, skipped = [], 0, 0
     for spec in a.specs.split(","):
@@ -91,6 +102,44 @@ def cmd_hover_build(a):
                 idx += 1
     write_jsonl(a.out, items)
     print(f"wrote {len(items)} hover items from {len(recs)} accepted claims (skipped {skipped}) -> {a.out}")
+
+
+def cmd_hover_review(a):
+    """Write a human-readable sample of accepted / verifier-rejected / unusable records (UTF-8)."""
+    R = read_jsonl(a.processed)
+    rng = np.random.default_rng(a.seed)
+
+    def show(r):
+        d = r.get("decomposition") or {}
+        return {"uid": r["uid"], "claim": r["claim"], "explicit": d.get("fictional_claim_explicit"),
+                "subs": [s["fictional"] for s in d.get("subclaims", [])],
+                "negs": [s["fictional_negation"] for s in d.get("subclaims", [])],
+                "bridge": d.get("bridge_index"),
+                "why_rejected": r.get("structural_issue") or (r.get("verification") or {}).get("issues")}
+
+    def sample(rows, k):
+        idx = rng.permutation(len(rows))[:k]
+        return [rows[i] for i in idx]
+
+    groups = {"accepted": [r for r in R if r["accepted"]],
+              "verify_failed": [r for r in R if r["structural_ok"] and not r["accepted"]],
+              "not_usable": [r for r in R if not r["structural_ok"]]}
+    out = {"counts": {k: len(v) for k, v in groups.items()},
+           "accepted": [show(r) for r in sample(groups["accepted"], a.n)],
+           "verify_failed": [show(r) for r in sample(groups["verify_failed"], a.n)],
+           "not_usable": [{"claim": r["claim"], "reason": (r.get("decomposition") or {}).get("reason")}
+                          for r in sample(groups["not_usable"], a.n)]}
+    with open(a.out, "w", encoding="utf-8") as f:
+        json.dump(out, f, indent=1, ensure_ascii=False)
+    print(f"counts: {out['counts']} -> {a.out}")
+
+
+def cmd_hover_crossver(a):
+    from lc import crossver
+    if a.action == "submit":
+        crossver.submit(a.processed, a.model, a.effort, a.max_tokens, a.limit, a.dry_run, a.force)
+    else:
+        crossver.collect(a.processed)
 
 
 def cmd_export(a):
@@ -120,6 +169,9 @@ def cmd_stats(a):
         nq = sum(len(it.queries) for it in items)
         worst = max(abs(v) for it in items for v in it.identity_residuals({q.qid: q.truth for q in it.queries}).values())
         print(f"{p}: {len(items)} items, {nq} queries, max |identity residual on truth| = {worst:.2e}")
+        flagged = sum(bool(it.meta.get("similar_name_pairs")) for it in items)
+        if any(it.family == "hover" for it in items):
+            print(f"   hover items with near-identical entity names: {flagged}")
         for k, v in sorted(by.items()):
             print(f"   {k}: {v}")
 
@@ -154,8 +206,29 @@ def main():
     s.add_argument("--processed", default="data/hover_processed.jsonl")
     s.add_argument("--specs", default="full,qualitative")
     s.add_argument("--variants", type=int, default=1, help="independently sampled worlds per claim per spec")
+    s.add_argument("--require-crossver", action="store_true",
+                   help="keep only claims that also passed the Claude cross-verification")
+    s.add_argument("--drop-similar-names", action="store_true",
+                   help="exclude claims whose fictional entities have near-identical names (e.g. Vane/Vance)")
     s.add_argument("--seed", type=int, default=0)
     s.add_argument("--out", default="data/hover_items.jsonl")
+
+    s = sp.add_parser("hover-crossver", help="re-verify accepted claims with Claude (Batch API)")
+    s.set_defaults(fn=cmd_hover_crossver)
+    s.add_argument("action", choices=["submit", "collect"])
+    s.add_argument("--processed", default="data/hover_processed.jsonl")
+    s.add_argument("--model", default="claude-opus-5-5")
+    s.add_argument("--effort", default="medium", choices=["low", "medium", "high"])
+    s.add_argument("--max-tokens", type=int, default=16000, help="ceiling on thinking + answer tokens")
+    s.add_argument("--limit", type=int, default=0)
+    s.add_argument("--dry-run", action="store_true", help="write the requests to a preview file; send nothing")
+    s.add_argument("--force", action="store_true", help="submit even if a previous batch is uncollected")
+
+    s = sp.add_parser("hover-review"); s.set_defaults(fn=cmd_hover_review)
+    s.add_argument("--processed", default="data/hover_processed.jsonl")
+    s.add_argument("--n", type=int, default=8, help="records sampled per group")
+    s.add_argument("--seed", type=int, default=0)
+    s.add_argument("--out", default="review.json")
 
     s = sp.add_parser("export-prompts"); s.set_defaults(fn=cmd_export)
     s.add_argument("--items", nargs="+", required=True)

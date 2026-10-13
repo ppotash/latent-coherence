@@ -1,0 +1,97 @@
+# Models available to `lceval.py run --model <name>`.
+#
+# rates: USD per million tokens (input, output, cache_read, cache_write). They drive the cost
+# estimate, the running cost display, and the --max-cost guard; a model without rates can
+# only run with --allow-unpriced. Anthropic rates checked 2026-10-11 against
+# https://platform.claude.com/docs/en/about-claude/pricing ; fill in the others from each
+# provider's pricing page.
+#
+# model_id = "TODO" blocks a model from running until you set its exact API string.
+
+# effort: the reasoning level every call for this model uses (overridable with --effort).
+# Nominal level is medium. GLM, Kimi and DeepSeek have no medium (low/high/max only), so
+# they run at high, the nearest level that keeps reasoning substantial. Grok: if the API
+# rejects reasoning_effort, the adapter drops it and the model default applies (check
+# `dropped_params` at the end of the first run). State these per-vendor settings in any write-up.
+
+[models.claude-fable-5-1]
+provider = "anthropic"
+model_id = "claude-fable-5-1"
+effort = "medium"
+rates = { input = 10.0, output = 50.0, cache_read = 0.25, cache_write = 12.5 }
+
+[models.claude-opus-5-5]
+provider = "anthropic"
+model_id = "claude-opus-5-5"
+effort = "medium"
+rates = { input = 4.0, output = 20.0, cache_read = 0.20, cache_write = 5.0 }
+
+[models.claude-sonnet-5-5]
+provider = "anthropic"
+model_id = "claude-sonnet-5-5"
+effort = "medium"
+rates = { input = 2.0, output = 10.0, cache_read = 0.10, cache_write = 2.5 }
+
+[models.claude-haiku-5-5]
+provider = "anthropic"
+model_id = "claude-haiku-5-5"
+effort = "medium"
+rates = { input = 0.10, output = 0.50, cache_read = 0.01, cache_write = 0.125 }
+
+[models.gemini-3-8-flash]
+provider = "gemini"
+model_id = "gemini-3.8-flash"
+effort = "medium"
+rates = { input = 0.75, output = 3.75, cache_read = 0.19 }   # `batch` halves these
+
+# Rates below are copied from the companion project's config; verify before trusting costs.
+
+[models.gpt-6-1-sol]
+provider = "openai"
+model_id = "gpt-6.1-sol"
+effort = "medium"
+rates = { input = 2.00, output = 10.00, cache_read = 0.10 }
+
+[models.grok-4-7]
+provider = "xai"
+model_id = "grok-4.7"
+effort = "medium"
+rates = { input = 2.00, output = 6.00 }
+
+[models.glm-5-3]
+provider = "zai"
+model_id = "glm-5.3"
+effort = "high"
+rates = { input = 1.40, output = 4.40, cache_read = 0.26 }
+
+[models.kimi-k3]
+provider = "moonshot"
+model_id = "kimi-k3"
+effort = "high"
+rates = { input = 3.00, output = 15.00, cache_read = 0.30 }
+
+[models.deepseek-v4-pro]
+provider = "deepseek"
+model_id = "deepseek-v4-pro"
+effort = "high"
+rates = { input = 0.55, output = 2.20, cache_read = 0.06 }
+
+# ---- offline simulators (no API calls; used by tests and for trying the pipeline) ----
+
+[models.sim-coherent]
+provider = "sim"
+model_id = "sim-coherent"
+rates = { input = 0.0, output = 0.0 }
+sim = { noise = 0.0, shrink = 1.0 }
+
+[models.sim-incoherent]
+provider = "sim"
+model_id = "sim-incoherent"
+rates = { input = 0.0, output = 0.0 }
+sim = { noise = 0.25, shrink = 0.6, garble = 0.02, seed = 1 }
+
+[models.sim-noisy]
+provider = "sim"
+model_id = "sim-noisy"
+rates = { input = 0.0, output = 0.0 }
+sim = { noise = 0.4, shrink = 1.0, seed = 2 }

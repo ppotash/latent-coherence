@@ -223,3 +223,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+review.json
+review_full.json
+review_crossver.json
+runs/
+*.bak
+data/crossver_requests_preview.jsonl
+data/crossver_state.json

@@ -1,3 +1,6 @@
 numpy
 pydantic
 google-genai
+anthropic
+httpx
+pandas
