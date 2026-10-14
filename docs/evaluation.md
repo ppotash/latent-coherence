@@ -90,7 +90,7 @@ any parameter the API rejects, so batch and synchronous answers are directly com
 Use `batch` for every model it supports. `run` is for providers without a batch path
 (Grok, GLM, Kimi, DeepSeek are untested with batch) and for quick checks.
 
-**analyze** writes CSVs to `runs/<name>/analysis/` and prints:
+**analyze** writes CSVs to `runs/<name>/analysis/` (`--models a b c` restricts it to some models, so the shared-item set is computed among them; `--out` names the CSV folder) and prints:
 
 | table | question it answers |
 |---|---|

@@ -64,7 +64,7 @@ def load_run(run_dir: str | Path):
     run = Path(run_dir)
     items = {d["id"]: d for d in read_jsonl(run / "items.jsonl")}
     noise_items = {r["item_id"] for r in read_jsonl(run / "rows.jsonl") if r.get("noise_floor_item")}
-    answers, meta, truncated = {}, [], []
+    answers, meta, truncated, parse_changes = {}, [], [], []
     for p in sorted(run.glob("*.jsonl")):
         if p.name in ("rows.jsonl", "items.jsonl"):
             continue
@@ -87,8 +87,11 @@ def load_run(run_dir: str | Path):
                 if (prob is None) != (r.get("prob") is None) or (
                         prob is not None and abs(prob - r["prob"]) > 1e-9):
                     n_reparsed += 1
+                    parse_changes.append({"model": model, "row_id": r["row_id"], "qid": r["qid"],
+                                          "stored": r.get("prob"), "now": prob, "flag": flag,
+                                          "text": r["text"][:800]})
                 r["prob"], r["parse_flag"] = prob, flag
-                n_check += flag in ("first_line", "marker", "bold", "ambiguous")
+                n_check += flag in ("first_line", "marker", "ambiguous")
         a = {}
         for r in latest.values():
             if is_valid(r) and r.get("prob") is not None:
@@ -118,6 +121,7 @@ def load_run(run_dir: str | Path):
             "mean_output_tokens": round(np.mean([r["usage"]["output_tokens"] for r in ok]), 1) if ok else None,
             "mean_reasoning_tokens": round(np.mean([r["usage"]["reasoning_tokens"] for r in ok]), 1) if ok else None,
         })
+    load_run.parse_changes = pd.DataFrame(parse_changes)
     return items, noise_items, answers, pd.DataFrame(meta), pd.DataFrame(truncated)
 
 
@@ -401,6 +405,9 @@ def analyze(run_dir: str, exclude_similar_names: bool = False, min_effect: float
     pw.to_csv(outd / "pairwise_power.csv", index=False)
     if len(trunc):
         trunc.to_csv(outd / "truncated.csv", index=False)
+    pc = getattr(load_run, "parse_changes", pd.DataFrame())
+    if len(pc):
+        pc.to_csv(outd / "parse_changes.csv", index=False)
 
     if note:
         print(note)

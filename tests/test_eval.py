@@ -32,7 +32,16 @@ def test_parse():
              "**0.4**\n\nSince the fault is a worn bearing: 0.3 x 0.6 + ...": 0.4,
              "**≈ 0.342**\n\nReasoning summary:\n- **Zateim**: careless (0.2)": 0.342,
              "P(A)=0.3 and P(B)=0.5, so the final answer is 0.42.": 0.42,
-             "The first factor is 0.3. Overall: **0.21**.": 0.21}
+             "The first factor is 0.3. Overall: **0.21**.": 0.21,
+             # explanation first, answer last (Opus/Haiku's layout) must keep the last number
+             "P = 0.3*0.5 + 0.7*0.2 = 0.15 + 0.14\n\n**0.29**": 0.29,
+             "Source A is reliable (0.8), B is not (0.4).\nSo the probability is about 0.62.": 0.62,
+             "0.3 for the first case and 0.5 for the second, giving 0.44": 0.44,
+             "Weighted: 0.6*0.5 + 0.4*0.25\n= 0.4": 0.4,
+             # real Haiku answers: labelled answer first, explanation with other numbers after
+             "**Answer: 0.90**\n\nThe prior is 0.30 ... treated as an 80% prior.": 0.9,
+             "**Estimate: 0.38**\n\nroughly 0.97 ... about 0.6 ... at about 0.38.\n\n3": 0.38,
+             "**0.786**\n\n- P(shaded) = 175/600 ... 24/25 = 0.96\n\nSum: ... ≈ 0.7857": 0.786}
     for txt, want in cases.items():
         got, _ = parse_probability(txt)
         assert (got is None and want is None) or abs(got - want) < 1e-9, (txt, got, want)

@@ -1,118 +1,191 @@
-# Latent-coherence eval dataset
+# latent-coherence
 
-Tests whether an LLM's probability judgments satisfy the law of total probability over a
-**latent variable inferred from records in context**. The core check is whether P(X) asked
-directly equals Σ_z P(z)·P(X | z) built from the model's own answers. A causal family adds
-P(y | do(x)) vs the back-door adjustment. Every query has an **exact** ground-truth
-probability, so incoherence and miscalibration can be measured separately.
+Do LLM probability judgments obey the law of total probability? This repo is an eval of
+P(X) vs Σ P(z)·P(X|z) over latent variables inferred from in-context records.
 
-## Families
+Each item gives the model a set of records, such as source track records, an inspection log,
+an observational count table or multi-hop claims with reports of varying reliability. The model
+is then asked, in separate calls, for
 
-| family | latent / structure | targets | identities per item |
-|---|---|---|---|
-| `source` | claim truth X; latent = kind (careful/careless) of one reporting source, inferred from its track record | X | total prob. over latent, reverse total prob. (Bayes direction), 2 normalizations |
-| `diagnostic` | 3-state hidden cause inferred from an inspection log | future outcome X, unperformed test Y | 2 total prob. (X and Y over the same latent), 2 normalizations |
-| `causal` | confounded observational count table (Z → X, Z → Y, X → Y) | P(y \| do(x)), P(y \| x) | back-door (×2), observational total prob. (×2), 3 normalizations |
-| `hover` | HoVer multi-hop claims, decomposed and fictionalized, with reports from sources of varying reliability; latents = bridge sub-claim truth, and kind of a source reporting on it | X = full claim | total prob. over bridge fact (with P(X \| ¬bridge) = 0), over source kind, reverse, normalizations |
+- the probability of a target event X directly, and
+- the probability of each state z of a latent variable, and of X given each state.
 
-`source` and `diagnostic` come in two **spec levels**: `full` (all probabilities stated, so the
-item is a well-posed calculation) and `qualitative` (only verbal descriptions like "usually"
-or "most sources are careful"). Ground truth is always computed from the generating
-numbers. Coherence needs no ground truth, so it is valid at both levels.
+A coherent model's direct answer should equal its own decomposition Σ P̂(z)·P̂(X|z). A causal
+family checks the same thing for P(y | do(x)) against the back-door adjustment. Every query
+also has an exact ground-truth probability, so incoherence and miscalibration are measured
+separately.
 
-Every conditional query is rendered in two **framings**, `learn` ("Suppose you additionally
-learn, from a completely reliable check…") and `assume` ("Assume hypothetically…"), with
-three question **paraphrases**. Each prompt comes in a numeric form ("respond with a
-probability") and a Yes/No form for logprob elicitation.
+The motivation is LawZero's *Scientist AI* proposal (Bengio et al., 2025). It relies on a
+predictor whose probabilistic judgments compose correctly, which raises the question of how
+close current frontier models come.
 
-## Files
+## Results
 
-```
-lcbuild.py              CLI (see below)
-lc/engine.py            exact inference for source-reliability worlds (enumeration)
-lc/synth.py             source / diagnostic / causal generators
-lc/hover.py             HoVer selection, Gemini decompose + verify prompts, item builder
-lc/hover_gold.py        hand-written gold decompositions (few-shot examples + offline fixture)
-lc/llm.py               async Gemini JSON client with resumable on-disk cache
-lc/schema.py            item / query / identity schema, prompt rendering
-tests/test_dataset.py   engine vs. rejection sampling, identities exact on truth, rendering
-data/synth_items.jsonl  1,500 synthetic items (300 per family × spec level)
-data/synth_prompts.jsonl   (not committed) generate with: python lcbuild.py export-prompts --items data/synth_items.jsonl --out data/synth_prompts.jsonl
-data/hover_candidates.jsonl 1,500 HoVer train claims (500 each of 2/3/4 hops), pre-filtered
-data/sample_hover_items.jsonl 18 HoVer items built from the gold decompositions (preview only)
-```
+There are 1,590 prompts per model, covering 95 shared items. Each prompt is an independent
+single-turn call. Residuals are |direct − decomposed| in log-odds; brackets are 95% bootstrap
+CIs over items.
 
-## Running it
+| model | effort | mean residual | systematic SD | rewording noise | error vs truth | reasoning tok/call | cost |
+|---|---|---|---|---|---|---|---|
+| GPT-6.1 Sol | medium | **0.08** [0.06, 0.11] | 0.08 [0, 0.13] | **0.16** | **0.34** | ~400 | $3.96 |
+| Claude Opus 5.5 | medium | 0.12 [0.07, 0.17] | 0.00 [0, 0.14] | 0.34 | 0.38 | ~500 | $17.61 |
+| Grok 4.7 | low¹ | 0.21 [0.15, 0.27] | 0.20 [0, 0.30] | 0.51 | 0.47 | ~7,200 | $70.44 |
+| Gemini 3.8 Flash | medium | 0.26 [0.19, 0.34] | **0.26 [0.09, 0.36]** | 0.50 | 0.73 | ~4,400 | $14.52 |
+| GLM 5.3 | high² | 0.26 [0.20, 0.33] | 0.09 [0, 0.23] | 0.53 | 0.41 | ~6,700 | $53.57 |
+| Claude Haiku 5.5 | medium | 0.37 [0.27, 0.49] | **0.32 [0.13, 0.44]** | 0.64 | 0.50 | ~1,100 | $0.62 |
+
+*Systematic SD* is the part of the residual that persists across three rewordings of the same
+question, with rewording noise subtracted out. This is the headline incoherence metric: a
+model that is noisy but coherent has a systematic SD of about 0. *Error vs truth* is the
+direct answer's mean log-odds error against ground truth.
+
+1. Grok ran at low because medium was projected to cost about $94. It still reasoned the most
+   of any model.
+2. GLM's API offers only low, high and max, so it runs at high, the level nearest to medium.
+   It needed a 65K-token limit: at 32K, 22% of its answers on multi-hop items with full
+   probabilities were cut off.
+
+What the results show:
+
+- **Two tiers.** GPT and Opus are not distinguishable from each other. Both are significantly
+  more coherent than Gemini, GLM and Haiku, and GPT also beats Grok. Within the lower tier,
+  the only significant difference is Grok over Haiku. Significance is judged by a paired
+  sign-flip permutation test with Bonferroni correction over the 15 model pairs.
+- **Systematic incoherence is model-specific.** It is clearly non-zero only for Haiku and
+  Gemini, and they err in opposite directions:
+  - Haiku's direct answer is *above* its own decomposition (+0.14, and +0.22 on multi-hop
+    claims with full probabilities).
+  - Gemini's is *below* (−0.11, and −0.32 on qualitative multi-hop claims).
+
+  For the other four models, the residual is mostly rewording noise.
+- **More reasoning did not buy coherence.** The two most coherent models reasoned the least
+  (~400–500 tokens per call). Grok, GLM and Gemini reasoned 9–18 times as much and landed in
+  the lower tier. With six models this is a pattern, not a test.
+- **Basic consistency holds everywhere.** Back-door adjustment matches P(y | do(x)) exactly,
+  and probabilities over a partition sum to 1 (median deviation ≤ 0.01). The failures are
+  specific to reasoning over a latent.
+- **Decomposing rarely helps accuracy.** The model's own Σ P̂(z)·P̂(X|z) is about as far from
+  the truth as its direct answer.
+
+Methods details, caveats and every command are in [`docs/evaluation.md`](docs/evaluation.md).
+
+## Quick start
 
 ```bash
-pip install numpy google-genai pydantic
-python tests/test_dataset.py
+pip install -r requirements.txt
+python tests/test_dataset.py && python -m pytest tests/test_eval.py
 
-# synthetic (already built; rerun to change sizes/seed)
-python lcbuild.py synth --n 300 --out data/synth_items.jsonl
-
-# HoVer hybrid: needs your Gemini key
-export GEMINI_API_KEY=...
-python lcbuild.py hover-process --candidates data/hover_candidates.jsonl \
-    --dec-model <your best Gemini model> --ver-model <a strong Gemini model> \
-    --limit 50 --out data/hover_processed.jsonl      # pilot first; drop --limit for the full run
-python lcbuild.py hover-build --processed data/hover_processed.jsonl --out data/hover_items.jsonl
-
-python lcbuild.py stats --items data/synth_items.jsonl data/hover_items.jsonl
-python lcbuild.py export-prompts --items data/synth_items.jsonl data/hover_items.jsonl --out data/prompts.jsonl
+# try the whole pipeline offline with a simulated model (no API calls)
+python lceval.py select --run runs/try --n-per-group 4 --noise-items 8
+python lceval.py run --run runs/try --model sim-incoherent --yes
+python lceval.py analyze --run runs/try
 ```
 
-The default model names (`gemini-2.5-flash` / `gemini-2.5-pro`) are placeholders, so pass
-whatever is current on your account. The Gemini calls are cached in
-`data/hover_processed.cache/`, so an interrupted run resumes where it stopped. Expect about
-2 calls per claim with roughly 3k input tokens each (the prompt includes 5 few-shot
-examples).
+To evaluate a real model, add its API key to `.env` (see `.env.example`) and its entry to
+`config/models.toml`. Then:
 
-After the pilot, read about 30 accepted records in `hover_processed.jsonl` before the full
-run. The verifier is a second LLM, not a guarantee. Check three things:
+```bash
+python lceval.py select   --run runs/main --n-per-group 20 --noise-items 20
+python lceval.py estimate --run runs/main --models claude-opus-5-5 --cap synthetic-full=5
+python lceval.py batch submit  --run runs/main --model claude-opus-5-5 --cap synthetic-full=5  # Claude / GPT / Gemini, half price
+python lceval.py batch collect --run runs/main --model claude-opus-5-5
+python lceval.py run --run runs/main --model grok-4-7 --cap synthetic-full=5 --max-cost 20      # other providers
+python lceval.py analyze  --run runs/main --planned-models 6
+```
 
-1. the explicit claim equals the conjunction of the sub-claims;
-2. no sub-claim entails another (the generator samples their truths independently);
-3. each negation is an exact negation.
+Every run starts with a few synchronous probe calls that measure the real cost per call, and
+asks for confirmation before going further. Reasoning-heavy items cost far more than average,
+so check progress with `python scripts/project_cost.py --run runs/main --model <name>`, which
+projects the cost to finish per item group.
 
-## Ground-truth semantics (what the numbers assume)
+## Dataset
 
-- **source / hover:** each statement is independently true with the stated base rate. The
-  target claim is true iff all its sub-claims are true. Each source is careful or careless,
-  with the stated prior. Past and current reports are correct with the kind-specific
-  accuracy, independently given the kind. Each report asserts either a statement or its
-  exact negation. The joint is enumerated exactly; tests confirm agreement with rejection
-  sampling.
-- **diagnostic:** naive Bayes over a 3-state cause with the shown table.
-- **causal:** the count table *is* the population; probabilities are empirical frequencies.
-  The context states that Z is the only confounder, so the back-door adjustment identifies
-  P(y | do(x)).
+| family | latent / structure | spec levels |
+|---|---|---|
+| `source` | claim truth X; latent = kind (careful or careless) of one reporting source, inferred from its track record | full, qualitative |
+| `diagnostic` | 3-state hidden cause inferred from an inspection log; targets are a future outcome and an unperformed test | full, qualitative |
+| `causal` | confounded observational count table (Z → X, Z → Y, X → Y); P(y \| do(x)) vs back-door adjustment | full |
+| `hover` | HoVer multi-hop claims, decomposed into sub-claims and fictionalized, with reports from sources of varying reliability; latents = the bridge sub-claim and a source's kind | full, qualitative |
 
-All items are filtered so the targets and latents fall in [0.1, 0.9] and the decomposition
-matters: the conditionals differ across latent states by at least 0.1–0.15. Without this
-filter, coherence would be trivially satisfied near 0 or 1.
+The spec level decides how much the model is told:
 
-## Using it in a harness
+- **full:** every probability is stated, so the item is a well-posed calculation.
+- **qualitative:** only verbal descriptions are given ("usually", "most sources are
+  careful"), so the model must form its own probabilities.
 
-For each item, collect the model's answer to every query (one call per prompt row; never
-show one query's answer in another's context). Then for each identity:
+Ground truth always comes from the generating numbers. Coherence needs no ground truth, so it
+is valid at both levels.
 
-- **total_probability:** residual = P̂(lhs) − Σ P̂(w)·P̂(c)
-- **normalization:** residual = Σ P̂(q) − 1
+- **Synthetic items** (`data/synth_items.jsonl`): 1,500 items, 300 per family × spec level,
+  generated with exact inference by enumeration.
+- **HoVer items** (`data/hover_items.jsonl`): 1,698 items built from 849 claims from the HoVer
+  training set (Jiang et al., 2020). Each claim was:
+  1. decomposed into sub-claims and fictionalized by Gemini;
+  2. checked by a second Gemini pass;
+  3. cross-verified by Claude.
 
-Report residuals in both probability and log-odds space. Compare them against the noise
-floor, estimated from the spread across paraphrases on the noise-floor items. Ground truth
-lets you also compute calibration (Brier / log loss) for P̂(X) directly and for the
-decomposed estimate Σ P̂(z)·P̂(X|z), which answers "is the decomposed estimate more
-accurate?"
+  Entity names are invented, so a model can't answer from memory. Items where the invented
+  names look alike are flagged and can be excluded with `--exclude-similar-names`.
+  `data/hover_processed.jsonl` and `data/crossver_results.jsonl` record how each claim was
+  accepted.
+
+Every query has three paraphrases, and conditional queries come in two framings ("suppose you
+learn…", "assume…"). By default a run asks only the prompts the headline identities need,
+in one framing.
+
+### Ground-truth semantics
+
+- **source / hover:**
+  - Each statement is independently true with the stated base rate, and a target claim is
+    true iff all its sub-claims are.
+  - Each source is careful or careless with the stated prior.
+  - Past and current reports are correct with the kind's accuracy, independently given the
+    kind.
+  - The joint is enumerated exactly; tests check it against rejection sampling.
+- **diagnostic:** naive Bayes over a 3-state cause with the table shown.
+- **causal:** the count table is the population. The context states that Z is the only
+  confounder, so the back-door adjustment identifies P(y | do(x)).
+
+Items are filtered so that targets and latents fall in [0.1, 0.9] and the conditionals differ
+across latent states by at least 0.1–0.15. Without that filter, coherence would hold trivially.
+
+### Rebuilding the dataset
+
+```bash
+python lcbuild.py synth --n 300 --out data/synth_items.jsonl
+python lcbuild.py hover-process --candidates data/hover_candidates.jsonl --dec-model <gemini model> --ver-model <gemini model> --out data/hover_processed.jsonl
+python lcbuild.py hover-crossver submit     # Claude Batch API; later:
+python lcbuild.py hover-crossver collect
+python lcbuild.py hover-build --processed data/hover_processed.jsonl --require-crossver --out data/hover_items.jsonl
+```
+
+Set the Gemini thinking level explicitly before a full HoVer run. Gemini 3 defaults to high
+thinking, which makes generation several times more expensive.
+
+## Repository layout
+
+```
+lceval.py, lcbuild.py   CLIs for evaluation and dataset construction
+lc/evaluate.py          item selection, cost estimates, synchronous runs
+lc/batch.py             Anthropic / OpenAI / Gemini batch APIs
+lc/analyze.py           identities, noise-vs-systematic decomposition, calibration, pairwise tests
+lc/parse.py             probability extraction (answer-first and answer-last layouts)
+lc/providers/           provider adapters (reasoning controls, token accounting)
+lc/engine.py, synth.py  exact-inference worlds and synthetic generators
+lc/hover*.py, crossver.py  HoVer decomposition, gold examples, Claude cross-verification
+config/models.toml      model names, reasoning effort, prices
+scripts/                effort_check.py (does a provider honour reasoning effort?), project_cost.py
+docs/evaluation.md      full evaluation guide
+```
 
 ## License
 
-Code: MIT (see `LICENSE`). Data in `data/`: CC BY-SA 4.0 (see `DATA_LICENSE`). The HoVer-derived
-files adapt claims from HoVer (Jiang et al., 2020), which is distributed under CC BY-SA 4.0. HoVer
-decompositions and fictionalizations were generated with Gemini.
+Code: MIT. Data: CC BY-SA 4.0, because the HoVer items are derived from HoVer, which is
+CC BY-SA.
 
-## Citation
+## References
 
-If you use the HoVer-derived items, please also cite:
-Jiang et al. 2020. HoVer: A Dataset for Many-Hop Fact Extraction and Claim Verification. Findings of EMNLP.
+- Bengio et al. (2025). *Superintelligent Agents Pose Catastrophic Risks: Can Scientist AI
+  Offer a Safer Path?* arXiv:2502.15657.
+- Jiang et al. (2020). *HoVer: A Dataset for Many-Hop Fact Extraction and Claim Verification.*
+  Findings of EMNLP.

@@ -95,6 +95,9 @@ def main():
                    help="number of models you plan to compare (sets the Bonferroni correction)")
     s.add_argument("--all-items", action="store_true",
                    help="summarize each model on all its items, even when models answered different sets")
+    s.add_argument("--models", nargs="+", default=None,
+                   help="analyze only these models (the shared-item set is then computed among them)")
+    s.add_argument("--out", default="analysis", help="subfolder of the run for the CSVs")
 
     a = ap.parse_args()
     if a.cmd == "select":
@@ -118,7 +121,8 @@ def main():
             batch.collect(a.run, a.model, not a.no_save_reasoning)
     else:
         from lc.analyze import analyze
-        analyze(a.run, a.exclude_similar_names, a.min_effect, a.planned_models, a.all_items)
+        analyze(a.run, a.exclude_similar_names, a.min_effect, a.planned_models, a.all_items,
+                a.models, a.out)
 
 
 if __name__ == "__main__":

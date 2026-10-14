@@ -4,19 +4,25 @@ Accepted forms: an explicit fraction ("1/3", "1 in 3"), a number in [0, 1] ("0.3
 "0", "1"), a percentage ("35%"). A bare number in (1, 100] without a percent sign is read
 as a percentage but flagged.
 
-Most models answer with the number alone. Some (GLM, for one) put the answer first, in
-bold, and then explain, and the explanation can contain other numbers in [0, 1]. So when
-the text holds several different candidates, the answer is chosen in this order:
+Most models answer with the number alone, or explain first and end with the number. Some
+(GLM, for one) put the answer first, in bold, and then explain. Either way the explanation
+can contain other numbers in [0, 1], so when the text holds several different candidates
+the answer is chosen in this order:
 
   1. the whole text is one probability                      -> flag ""
-  2. the first non-empty line is just a probability         -> flag "first_line"
-     (markdown, "~", "≈", "approximately", a trailing period are ignored)
-  3. the last "answer is / answer: / probability:" marker   -> flag "marker"
-  4. exactly one distinct probability in **bold**           -> flag "bold"
-  5. otherwise the last candidate                           -> flag "ambiguous"
+  2. the last non-empty line is just a probability          -> flag "last_line"
+  3. the first non-empty line is just a probability         -> flag "first_line"
+     (for 2 and 3, markdown, "~", "≈", "approximately", a trailing period are ignored;
+     if both hold and disagree, the last line wins and the flag is "ambiguous")
+  4. the last "final answer" / "answer:" / "answer is" marker -> flag "marker"
+  5. otherwise the last candidate (models usually end with the answer) -> flag "ambiguous"
 
-Flags other than "" and "assumed_percent" mark answers worth spot-checking; `analyze`
-counts them per model.
+Rules 2, 4 and 5 agree with simply taking the last number whenever the answer comes last,
+which is how most models lay out an explained answer; only rule 3 (answer first, then an
+explanation) and rule 4 (an explicit marker followed by more numbers) can pick differently.
+
+Flags other than "", "last_line" and "assumed_percent" mark answers worth spot-checking;
+`analyze` counts them per model.
 """
 from __future__ import annotations
 
@@ -24,8 +30,8 @@ import re
 
 _FRAC = re.compile(r"(?<![\d.])(\d+)\s*(?:/|in|out of)\s*(\d+)(?![\d.])", re.I)
 _NUM = re.compile(r"(?<![\w.])(\d+(?:\.\d+)?|\.\d+)\s*(%|percent)?", re.I)
-_BOLD = re.compile(r"\*\*(.+?)\*\*|__(.+?)__", re.S)
-_MARKER = re.compile(r"(?:final\s+answer|answer|probability)\s*(?:is|:|=|≈|of)?\s*", re.I)
+_MARKER = re.compile(r"(?:final\s+answer\s*(?:is|:|=|≈)?|\banswer\s*(?:is|:|=|≈))\s*", re.I)
+_LABEL = re.compile(r"^(?:final\s+)?(?:answer|estimate|probability|result)\s*[:=]\s*", re.I)
 _DECOR = re.compile(r"[*_`#>~≈]|\$|\\\(|\\\)|\bapprox(?:imately)?\.?|\babout\b|\baround\b|\bP\s*=", re.I)
 
 
@@ -55,9 +61,13 @@ def _candidates(t: str) -> list[tuple[int, float, str]]:
 def _only_probability(s: str) -> tuple[float, str] | None:
     """s is a probability and nothing else (ignoring decoration), e.g. '**≈ 0.342**'."""
     core = _DECOR.sub(" ", s).strip().rstrip(".").strip()
+    # a short leading label is allowed: "Answer: 0.9", "Estimate: 0.38". Not "P(A) = 0.3",
+    # which in an explanation's first line is usually an intermediate quantity.
+    core = _LABEL.sub("", core, count=1).strip()
     if not core:
         return None
-    c = _candidates(core)
+    # a bare integer like a stray "3" is not read as 3% here (unlike a whole one-token answer)
+    c = [x for x in _candidates(core) if x[2] != "assumed_percent"]
     if not c or len({round(v, 9) for _, v, _ in c}) != 1:
         return None
     # the candidate(s) must account for the whole string ("0.35 (35%)" is one answer)
@@ -79,21 +89,19 @@ def parse_probability(text: str | None) -> tuple[float | None, str]:
         return cands[-1][1], cands[-1][2]
 
     lines = [ln for ln in t.splitlines() if ln.strip()]
-    first = _only_probability(lines[0]) if lines else None
-    if first is not None:                                     # 2. answer-first layout
+    last = _only_probability(lines[-1]) if lines else None
+    first = _only_probability(lines[0]) if len(lines) > 1 else None
+    if last is not None:                                      # 2. answer-last layout
+        if first is not None and abs(first[0] - last[0]) > 1e-9:
+            return last[0], "ambiguous"
+        return last[0], "last_line"
+    if first is not None:                                     # 3. answer-first layout
         return first[0], "first_line"
 
     markers = list(_MARKER.finditer(t))
-    for m in reversed(markers):                               # 3. explicit answer marker
+    for m in reversed(markers):                               # 4. explicit answer marker
         after = [c for c in cands if c[0] > m.end() and c[0] - m.end() <= 40]
         if after:
             return after[0][1], "marker"
-
-    bold_vals = set()
-    for m in _BOLD.finditer(t):                               # 4. a single bolded probability
-        inner = m.group(1) or m.group(2)
-        bold_vals |= {round(v, 9) for _, v, _ in _candidates(inner)}
-    if len(bold_vals) == 1:
-        return bold_vals.pop(), "bold"
 
     return cands[-1][1], "ambiguous"                          # 5. fall back to the last one
