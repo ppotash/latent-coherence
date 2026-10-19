@@ -70,11 +70,13 @@ model_id = "kimi-k3"
 effort = "high"
 rates = { input = 3.00, output = 15.00, cache_read = 0.30 }
 
+# DeepSeek V4-Pro (serves the 0813 GA build). Peak rates, so cost tracking and --max-cost
+# err on the safe side; off-peak is half price.
 [models.deepseek-v4-pro]
 provider = "deepseek"
 model_id = "deepseek-v4-pro"
 effort = "high"
-rates = { input = 0.55, output = 2.20, cache_read = 0.06 }
+rates = { input = 1.32, output = 3.96, cache_read = 0.044 }
 
 # ---- offline simulators (no API calls; used by tests and for trying the pipeline) ----
 

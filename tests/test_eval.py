@@ -396,3 +396,20 @@ def test_truncated_responses_excluded_and_retried():
     assert key in answers["sim-coherent"] and answers["sim-coherent"][key] != 0.123
     assert meta.iloc[0].truncated == 0 and len(trunc) == 0
     shutil.rmtree(rd, ignore_errors=True)
+
+
+def test_persistent_residual_counts_a_shared_lean():
+    """A model off by the same amount on every item is persistently incoherent: the headline
+    score must see it (it used to measure only the spread across items, which is 0 here)."""
+    import pandas as pd
+    from lc.analyze import noise_decomposition
+    rows = []
+    for item in range(12):
+        for k, e in enumerate((-0.02, 0.0, 0.02)):
+            rows.append({"model": "m", "item_id": f"i{item}", "identity": "tp", "framing": "learn",
+                         "category": "total prob. over latent", "spec": "full", "family": "source",
+                         "kind": "total_probability", "paraphrase": k, "resid_logit": 0.3 + e})
+    r = noise_decomposition(pd.DataFrame(rows))
+    r = r[r.category == "all"].iloc[0]
+    assert abs(r.systematic_sd - 0.3) < 0.01 and r.systematic_spread_sd < 0.01
+    assert abs(r.mean_resid - 0.3) < 1e-9 and r.noise_sd < 0.03

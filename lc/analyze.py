@@ -258,22 +258,24 @@ def _frac_better(g):
 
 
 def noise_decomposition(df: pd.DataFrame) -> pd.DataFrame:
-    """Split residual variance into wording noise and systematic incoherence.
+    """Split residuals into rewording noise and persistent (systematic) incoherence.
 
     On noise-floor items every identity instance (item x identity x framing) has a residual
-    for each of 3 paraphrases. A coherent-but-noisy model has residuals that average to zero
-    for every instance; a systematically incoherent one has an instance-specific nonzero
-    residual that persists across wordings. With r_ik = mu_i + e_ik:
-        within  = mean_i var_k(r_ik)                 (wording noise)
-        between = var_i(mean_k r_ik) - within / 3    (systematic, noise-corrected)
-    `systematic_sd` = sqrt(max(between, 0)): incoherence that wording noise does not explain.
-    Note: `between` measures spread around the mean residual; a constant bias shared by all
-    instances shows up in `mean_resid` instead.
+    for each of 3 wordings: r_ik = mu_i + e_ik, where mu_i is the instance's persistent
+    residual and e_ik is wording noise with variance s^2. Then
+        within     = mean_i var_k(r_ik)                     estimates s^2
+        persistent = mean_i (mean_k r_ik)^2 - within / 3    estimates mean_i mu_i^2
+    since each 3-wording average carries noise variance s^2 / 3.
+    `systematic_sd` = sqrt(max(persistent, 0)): the typical size of an instance's residual
+    once wording noise is averaged out, including any lean shared by all instances (a model
+    off by +0.3 everywhere scores 0.3). `systematic_spread_sd` is the narrower spread-only
+    version (variance of the instance means minus within / 3), which ignores a shared lean;
+    that lean is `mean_resid`.
     """
     tp = df[df.kind == "total_probability"]
     keys = ["model", "item_id", "identity", "framing"]
     cols = ["model", "category", "n_instances", "noise_sd", "systematic_sd", "sys_sd_ci_lo", "sys_sd_ci_hi",
-            "systematic_share", "mean_resid"]
+            "systematic_share", "mean_resid", "systematic_spread_sd"]
     if not len(tp):
         return pd.DataFrame(columns=cols)
     g = tp.groupby(keys).filter(lambda x: x.paraphrase.nunique() == 3)
@@ -290,23 +292,23 @@ def noise_decomposition(df: pd.DataFrame) -> pd.DataFrame:
     for (model, cat), x in groups:
         if len(x) < 3:
             continue
-        within = x["var"].mean()
-        between = x["mean"].var(ddof=1) - within / 3
-        sys_var = max(between, 0.0)
-        # bootstrap over identity instances (resampling instances keeps each one's 3 paraphrases)
-        rng = np.random.default_rng(0)
         mu, va = x["mean"].to_numpy(), x["var"].to_numpy()
+        within = va.mean()
+        sys_var = max(float(np.mean(mu ** 2)) - within / 3, 0.0)
+        spread_var = max(float(mu.var(ddof=1)) - within / 3, 0.0)
+        # bootstrap over identity instances (resampling instances keeps each one's 3 wordings)
+        rng = np.random.default_rng(0)
         boots = []
         for _ in range(2000):
             idx = rng.integers(0, len(x), len(x))
-            b = mu[idx].var(ddof=1) - va[idx].mean() / 3
+            b = np.mean(mu[idx] ** 2) - va[idx].mean() / 3
             boots.append(math.sqrt(max(b, 0.0)))
         lo, hi = np.percentile(boots, [2.5, 97.5])
         out.append({"model": model, "category": cat, "n_instances": len(x),
                     "noise_sd": math.sqrt(within), "systematic_sd": math.sqrt(sys_var),
                     "sys_sd_ci_lo": lo, "sys_sd_ci_hi": hi,
                     "systematic_share": sys_var / (sys_var + within) if (sys_var + within) > 1e-12 else np.nan,
-                    "mean_resid": x["mean"].mean()})
+                    "mean_resid": float(mu.mean()), "systematic_spread_sd": math.sqrt(spread_var)})
     return pd.DataFrame(out, columns=cols)
 
 
@@ -425,9 +427,10 @@ def analyze(run_dir: str, exclude_similar_names: bool = False, min_effect: float
     print("\n== coherence by family and spec level (total-probability identities, paraphrase 0) ==\n"
           + fmt(s["by_family"]))
     print("\n== noise vs systematic incoherence (noise-floor items; log-odds) ==\n"
-          "   noise_sd: residual spread from rewording alone | systematic_sd: incoherence that persists\n"
-          "   across rewordings (noise-corrected; CI = bootstrap over instances) | systematic_share: its\n"
-          "   fraction of residual variance\n"
+          "   noise_sd: residual spread from rewording alone (README: rewording noise) | systematic_sd:\n"
+          "   typical residual left after averaging over rewordings, noise-corrected (README: persistent\n"
+          "   residual; CI = bootstrap over instances) | mean_resid: its average sign (direction) |\n"
+          "   systematic_spread_sd: spread-only version that ignores a shared lean\n"
           + fmt(s["noise"]))
     print("\n== normalization: sum of P over a partition minus 1 ==\n" + fmt(s["normalization"]))
     print("\n== framing: |logit P(.|learn) - logit P(.|assume)| ==\n" + fmt(s["framing"]))
