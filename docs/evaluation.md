@@ -5,6 +5,10 @@ The study runs in stages, so you only pay for as many prompts as the statistics 
 ```bash
 # stage 1: 20 items per (family, spec) group, 20 of them asked in all 3 wordings
 python lceval.py select   --run runs/main --n-per-group 20 --noise-items 20
+# then 40 more repeated items, from the groups where wording matters (full-spec synthetic
+# items are calculations, so their wordings agree)
+python lceval.py select   --run runs/main --n-per-group 20 --noise-items 60 --grow \
+    --noise-groups diagnostic/qualitative,source/qualitative,hover/full,hover/qualitative
 python lceval.py estimate --run runs/main --models claude-opus-5-5 --cap synthetic-full=5
 python lceval.py batch submit  --run runs/main --model claude-opus-5-5 --cap synthetic-full=5
 python lceval.py batch collect --run runs/main --model claude-opus-5-5     # later
@@ -15,8 +19,10 @@ python lceval.py select   --run runs/main --n-per-group 40 --noise-items 20 --gr
 python lceval.py batch submit --run runs/main --model claude-opus-5-5 --cap synthetic-full=5   # asks only the new prompts
 ```
 
-The published results used exactly stage 1. That is 1,890 prompts per model, or 1,590 with
-`--cap synthetic-full=5`, which every model except Haiku used.
+The published results used exactly these two `select` commands: 140 items, 60 of them asked in
+all three wordings (3 from each full-spec synthetic group, 12–13 from each of the other four).
+That is 1,890 prompts per model, or 1,590 with `--cap synthetic-full=5`, which every model
+except Haiku used.
 
 Selection is nested: the items chosen at `--n-per-group 20` are always among those chosen at
 40, so growing a run never re-asks or discards a paid answer. `analyze` reports, for each pair
@@ -149,6 +155,14 @@ models, and `--out` names the CSV folder. It prints:
 
 Set `--planned-models` to the total number of models in the study, so the Bonferroni
 correction stays the same as models are added.
+
+**Extra analyses for the write-up.** `python scripts/paper_extras.py --run runs/main` (no API
+calls, same shared items and parser as `analyze`) prints: the item-level correlation of
+\|residual\| with error against truth, which estimate (P̂(z), P̂(X\|z), P̂(X)) is wrong on
+incoherent items, reasoning tokens vs \|residual\| within each model (including a comparison
+across the three wordings of the same item, which removes item difficulty), clipping rates
+and robustness to the clip level, the probability scale and renormalization, and every causal
+instance with a visible residual alongside its answer texts.
 
 ## Models
 

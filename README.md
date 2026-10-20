@@ -72,7 +72,7 @@ direct answer above the decomposition. The **mean residual** column in the resul
 average of |residual| over items.
 
 **Rewording noise vs persistent residual.** A nonzero residual could just be the model's answers
-jittering with the wording. So 20 items are asked in three wordings ("What is the probability that…",
+jittering with the wording. So 60 items are asked in three wordings ("What is the probability that…",
 "How likely is it that…", "Estimate the probability that…"):
 
 | wording | P̂(X) | Σ P̂(z)·P̂(X\|z) | residual |
@@ -90,7 +90,10 @@ would give something like +0.40, −0.30, −0.05. Over all repeated items, the 
   It is about 0 for a model that is noisy but coherent, and it counts a model that is off by
   the same amount on every item;
 - **direction**: the average signed residual, e.g. Haiku's +0.14 means its direct answers lean
-  high.
+  high;
+- **spread**: how much the persistent residual varies from item to item, leaving out the shared
+  lean. Persistent² ≈ spread² + direction², so a model that is off by a fixed offset has spread
+  near 0, and one that is off in different directions on different items has direction near 0.
 
 The exact formulas, for each repeated item with residuals r₁, r₂, r₃ under the three wordings:
 
@@ -99,11 +102,12 @@ within              = average over items of  variance(r₁, r₂, r₃)
 rewording noise     = √within
 persistent residual = √max(0, average over items of mean(r₁, r₂, r₃)²  −  within / 3)
 direction           = average over items of mean(r₁, r₂, r₃)
+spread              = √max(0, variance over items of mean(r₁, r₂, r₃)  −  within / 3)
 ```
 
 Each 3-wording average still carries a third of the noise variance, which is why within ⁄ 3 is
 subtracted. The 95% CI comes from a bootstrap over items. In `analyze` output these are
-`noise_sd`, `systematic_sd` and `mean_resid`.
+`noise_sd`, `systematic_sd`, `mean_resid` and `systematic_spread_sd`.
 
 **Accuracy.** Error vs truth = |logit(0.40) − logit(0.307)| = 0.41, averaged over items.
 
@@ -165,7 +169,8 @@ pieces, exactly as for the textile plant. A model that answered the do-question 
 
 ## Results
 
-Seven models, the same 95 items (1,590 prompts) each, every prompt an independent call. Lower is
+Seven models, the same 95 items (1,590 prompts) each, every prompt an independent call. (Haiku
+also answered 300 extra full-spec prompts, which are left out of all comparisons.) Lower is
 better in the first four columns; brackets are 95% CIs.
 
 | model | effort | mean residual | persistent residual | rewording noise | error vs truth | reasoning tok/call | cost |
@@ -199,38 +204,58 @@ that survives re-asking. GLM and Gemini show the difference:
 
 A single answer from either model is equally inconsistent, but for different reasons. GLM's
 residuals scatter around zero as the wording changes: its answers are unstable, and averaging
-several samples would remove most of the inconsistency. Gemini's residuals stay put whatever
-the wording, so its judgments themselves don't fit together, and re-asking won't fix that. For
+several samples would remove most of the inconsistency. Gemini's residuals vary just as much
+with the wording, but around nonzero values that persist, so its judgments themselves don't fit
+together, and re-asking won't fix that. For
 a system like Scientist AI, the persistent kind is the more serious problem.
 
 Compare each of the two numbers across models rather than against each other. The persistent
-residual is a root-mean-square over the 20 repeated items, so it weights large residuals more
+residual is a root-mean-square over the repeated items (83 item–question pairs), so it weights large residuals more
 heavily than the mean residual, which averages sizes over all 95 items. That is why DeepSeek's
 persistent residual (0.27) exceeds its mean residual (0.15): it is exact on most items (median
 residual 0.013) but consistently off on a few.
 
 **Findings**
 
-- **GPT and Opus lead.** They aren't significantly different from each other, and both beat
-  Gemini, GLM and Haiku. GPT also beats Grok. DeepSeek sits between the groups: it can't be
-  separated from either, but it beats Haiku. Among the rest, only Grok vs Haiku is significant.
-- **Persistent inconsistency is clearest in Haiku, Gemini and DeepSeek** (0.27–0.35), and they
-  lean in different directions. Haiku and DeepSeek lean high: their direct answers are above
+- **GPT and Opus lead; Gemini, GLM and Haiku trail; DeepSeek and Grok sit between.** GPT and
+  Opus aren't significantly different from each other, and both beat Gemini, GLM and Haiku,
+  which can't be told apart from one another. DeepSeek beats Haiku but can't be separated from
+  any other model. Grok loses to GPT and beats Haiku, but can't be separated from Opus,
+  DeepSeek, Gemini or GLM.
+- **Persistent inconsistency is clearest in Haiku, Gemini and DeepSeek** (0.27–0.35), and it
+  is mostly item-specific rather than a fixed offset: for every model except GLM, the shared
+  lean accounts for at most a sixth of persistent². So it can't be calibrated away. The leans
+  that do exist go in different directions. Haiku and DeepSeek lean high: their direct answers are above
   their decompositions (+0.14 and +0.08, up to +0.22 and +0.19 on HoVer items). Gemini leans
-  low (−0.11, and −0.32 on qualitative HoVer items). DeepSeek's answers barely change with
-  rewording, but 44% of its residual is persistent, the highest share of any model. GPT's
+  low (−0.11, and −0.32 on qualitative HoVer items). DeepSeek has the second-lowest rewording
+  noise, yet 44% of its residual is persistent, the highest share of any model. GPT's
   persistent residual also excludes 0, but it is small (0.08, about 2 points). For Opus, Grok
   and GLM it can't be distinguished from 0, so their residual is mostly rewording noise.
-- **No clear link between reasoning length and coherence.** The two most coherent models
-  reasoned least (~400–500 tokens). Grok, GLM and Gemini reasoned 9–18× more and landed lower,
-  while DeepSeek reasoned most (~16,900) and came third.
+- **Large residuals flag wrong answers.** Within every model, items with bigger residuals have
+  bigger errors against the truth (Spearman 0.40–0.62), and incoherent answers (|residual| > 0.5)
+  are 2–5× as far off as coherent ones. The residual needs no true answer, so it works as a
+  warning sign. Which answer is the wrong one depends on the model: for Gemini it's mostly the
+  direct answer, and its decomposition is closer to the truth; for Haiku and DeepSeek it's the
+  decomposition, and for DeepSeek mainly its estimate of the hidden variable.
+- **No link between reasoning length and coherence.** Across models, the two most coherent
+  reasoned least (~400–500 tokens); Grok, GLM and Gemini reasoned 9–18× more and were less
+  coherent, while DeepSeek reasoned most (~16,900) and came third. Within a model, asking the
+  same question in three wordings gives answers with different amounts of reasoning, and the
+  wording that drew more reasoning was no more or less coherent, for every model.
 - **Simpler checks pass.** P̂(careful) + P̂(careless) and similar pairs sum to 1 to within about
-  0.02. Causal answers match the models' own back-door adjustment, except for one item each for
-  GLM and DeepSeek.
-- **Decomposing rarely helps accuracy.** Σ P̂(z)·P̂(X|z) is about as far from the truth as the
-  direct answer.
+  0.02. Causal answers match the models' own back-door adjustment, with one exception each for
+  DeepSeek and GLM, both on the same item. There, each answered the do-question with the plain
+  observed rate (0.6735 and 0.375 exactly), ignoring the confounder, even though every piece of
+  its own adjustment was correct.
+- **Decomposing rarely helps accuracy overall.** Σ P̂(z)·P̂(X|z) is about as far from the truth
+  as the direct answer.
+- **Robust to the details.** The model ranking holds on the probability scale (GPT and Opus are
+  off by 1.5 and 1.9 percentage points on average), at other clipping levels, and after
+  rescaling P̂(z) to sum to 1. The only change is that Gemini and GLM, within 0.005 of each
+  other, sometimes swap places.
 
-Methods, caveats and every command are in [`docs/evaluation.md`](docs/evaluation.md).
+The technical write-up is [`paper/main.pdf`](paper/main.pdf). Methods, caveats and every command are
+in [`docs/evaluation.md`](docs/evaluation.md).
 
 ## Quick start
 
@@ -249,6 +274,8 @@ To evaluate a real model, add its API key to `.env` (see `.env.example`) and its
 
 ```bash
 python lceval.py select   --run runs/main --n-per-group 20 --noise-items 20
+python lceval.py select   --run runs/main --n-per-group 20 --noise-items 60 --grow \
+    --noise-groups diagnostic/qualitative,source/qualitative,hover/full,hover/qualitative
 python lceval.py estimate --run runs/main --models claude-opus-5-5 --cap synthetic-full=5
 python lceval.py batch submit  --run runs/main --model claude-opus-5-5 --cap synthetic-full=5  # Claude / GPT / Gemini, half price
 python lceval.py batch collect --run runs/main --model claude-opus-5-5
@@ -274,7 +301,8 @@ Items are either **full**, with every probability stated, or **qualitative**, wi
 like "usually", so the model must form its own numbers. Coherence compares the model with
 itself, so it can be measured at both levels.
 
-- **Synthetic** (`data/synth_items.jsonl`): 1,500 items, 300 per family × level.
+- **Synthetic** (`data/synth_items.jsonl`): 1,500 items, 300 in each of five groups (`source`
+  and `diagnostic` at both levels, `causal` full only).
 - **HoVer** (`data/hover_items.jsonl`): 1,698 items from 849 claims in the HoVer training set
   (Jiang et al., 2020). Gemini split each claim into sub-claims and replaced every real name
   with an invented one, so models can't answer from memory. A second Gemini pass checked the
@@ -322,7 +350,9 @@ lc/providers/           provider adapters (reasoning settings, token accounting)
 lc/engine.py, synth.py  exact true answers and synthetic generators
 lc/hover*.py, crossver.py  HoVer item construction and Claude cross-verification
 config/models.toml      model names, reasoning effort, prices
-scripts/                effort_check.py (does a provider honour the effort setting?), project_cost.py
+scripts/                effort_check.py (does a provider honor the effort setting?), project_cost.py,
+                        paper_extras.py (the extra analyses in the write-up)
+paper/                  LaTeX source and PDF of the technical write-up
 docs/evaluation.md      full evaluation guide
 ```
 

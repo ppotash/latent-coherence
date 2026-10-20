@@ -62,7 +62,7 @@ for m, ((est, lo, hi), _, _, tok) in D.items():
     ax.plot([tok, tok], [lo, hi], color=BLUE, lw=1.5, alpha=0.45, solid_capstyle="round")
     ax.plot([tok], [est], "o", ms=5.5, color=BLUE, mec="white", mew=1)
     dx, dy = offsets[m]
-    ax.annotate(m.replace("Claude ", ""), (tok, est), xytext=(dx, dy), textcoords="offset points",
+    ax.annotate(m, (tok, est), xytext=(dx, dy), textcoords="offset points",
                 ha="left" if dx > 0 else ("right" if dx < 0 else "center"), fontsize=7, color=INK2)
 ax.set_xscale("log")
 ax.set_xlim(250, 40000)
