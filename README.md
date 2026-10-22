@@ -175,16 +175,16 @@ better in the first four columns; brackets are 95% CIs.
 
 | model | effort | mean residual | persistent residual | rewording noise | error vs truth | reasoning tok/call | cost |
 |---|---|---|---|---|---|---|---|
-| GPT-6.1 Sol | medium | **0.08** [0.06, 0.11] | **0.08 [0.02, 0.13]** | **0.16** | **0.34** | ~400 | $3.96 |
-| Claude Opus 5.5 | medium | 0.12 [0.07, 0.17] | 0.00 [0, 0.14] | 0.34 | 0.38 | ~500 | $17.61 |
-| DeepSeek V4-Pro (0813) | high³ | 0.15 [0.10, 0.21] | **0.27 [0.10, 0.40]** | 0.30 | 0.37 | ~16,900 | ~$53⁴ |
+| GPT-6.1 Sol | medium | **0.08** [0.06, 0.11] | 0.08\* [0.02, 0.13] | **0.16** | **0.34** | ~400 | $3.96 |
+| Claude Opus 5.5 | medium | 0.12 [0.07, 0.17] | **0.00** [0, 0.14] | 0.34 | 0.38 | ~500 | $17.61 |
+| DeepSeek V4-Pro (0813) | high³ | 0.15 [0.10, 0.21] | 0.27\* [0.10, 0.40] | 0.30 | 0.37 | ~16,900 | ~$53⁴ |
 | Grok 4.7 | low¹ | 0.21 [0.15, 0.27] | 0.21 [0, 0.32] | 0.51 | 0.47 | ~7,200 | $70.44 |
-| Gemini 3.8 Flash | medium | 0.26 [0.19, 0.34] | **0.28 [0.10, 0.40]** | 0.50 | 0.73 | ~4,400 | $14.52 |
+| Gemini 3.8 Flash | medium | 0.26 [0.19, 0.34] | 0.28\* [0.10, 0.40] | 0.50 | 0.73 | ~4,400 | $14.52 |
 | GLM 5.3 | high² | 0.26 [0.20, 0.33] | 0.11 [0, 0.25] | 0.53 | 0.41 | ~6,700 | $53.57 |
-| Claude Haiku 5.5 | medium | 0.37 [0.27, 0.49] | **0.35 [0.15, 0.48]** | 0.64 | 0.50 | ~1,100 | $0.62 |
+| Claude Haiku 5.5⁵ | medium | 0.37 [0.27, 0.49] | 0.35\* [0.15, 0.48] | 0.64 | 0.50 | ~1,100 | $0.62 |
 
-In the persistent residual column, bold means the CI excludes 0; in the other columns it marks
-the best value.
+Bold marks the best value in a column. \* marks a persistent residual whose CI excludes 0, i.e.
+persistent inconsistency was detected.
 
 1. Medium was projected to cost about $94. Even at low, Grok reasoned more than every model
    except DeepSeek.
@@ -192,6 +192,9 @@ the best value.
    hardest items were cut off.
 3. DeepSeek has only none/high/max.
 4. At DeepSeek's off-peak rates, half the tracked peak cost ($106.87).
+5. Haiku was run first, as a cheap end-to-end test of the harness ($0.62 for every prompt,
+   uncapped). It's included as a reference point for a small, fast model rather than as a
+   planned comparison.
 
 **Mean vs persistent residual.** The mean residual measures how inconsistent a *single* answer
 is: wording noise and real inconsistency together. The persistent residual keeps only the part
@@ -200,7 +203,7 @@ that survives re-asking. GLM and Gemini show the difference:
 | | mean residual | persistent residual | rewording noise |
 |---|---|---|---|
 | GLM 5.3 | 0.26 | 0.11 [0, 0.25] | 0.53 |
-| Gemini 3.8 Flash | 0.26 | **0.28 [0.10, 0.40]** | 0.50 |
+| Gemini 3.8 Flash | 0.26 | 0.28\* [0.10, 0.40] | 0.50 |
 
 A single answer from either model is equally inconsistent, but for different reasons. GLM's
 residuals scatter around zero as the wording changes: its answers are unstable, and averaging
