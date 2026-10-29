@@ -37,7 +37,8 @@ must be inferred from records in the context. A causal family runs the same chec
 P(y | do(x)) against the back-door adjustment. Every query has an exact ground-truth
 probability, so coherence and accuracy can be measured separately.
 
-Code, evaluation harness and results: [github.com/ppotash/latent-coherence](https://github.com/ppotash/latent-coherence)
+- Paper: [arxiv.org/abs/2610.31833](https://arxiv.org/abs/2610.31833)
+- Code, evaluation harness and results: [github.com/ppotash/latent-coherence](https://github.com/ppotash/latent-coherence)
 
 ## Loading
 
@@ -143,10 +144,12 @@ under CC BY-SA 4.0.
 
 ```bibtex
 @misc{potash2026latentcoherence,
-  title  = {Latent Coherence: Do Frontier Language Models' Probability Judgments Obey the Law of Total Probability?},
-  author = {Potash, Peter},
-  year   = {2026},
-  url    = {https://github.com/ppotash/latent-coherence}
+  title         = {Latent Coherence: Do Frontier Language Models' Probability Judgments Obey the Law of Total Probability?},
+  author        = {Potash, Peter},
+  year          = {2026},
+  eprint        = {2610.31833},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2610.31833}
 }
 
 @inproceedings{jiang2020hover,

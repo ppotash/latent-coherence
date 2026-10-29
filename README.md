@@ -3,6 +3,8 @@
 Do LLM probability judgments obey the law of total probability? This repo is an eval of
 P(X) vs Σ P(z)·P(X|z) over latent variables inferred from in-context records.
 
+Paper: [arXiv:2610.31833](https://arxiv.org/abs/2610.31833) · Dataset: [ppotash/latent-coherence](https://huggingface.co/datasets/ppotash/latent-coherence) on Hugging Face
+
 Each item gives a model some records (source track records, an inspection log, a count table,
 or multi-hop claims with reports of varying reliability). In separate calls, it is asked for
 P(X) directly, for P(z) for each state of a hidden variable z, and for P(X|z). If its judgments
@@ -260,7 +262,7 @@ residual 0.013) but consistently off on a few.
   rescaling P̂(z) to sum to 1. The only change is that Gemini and GLM, within 0.005 of each
   other, sometimes swap places.
 
-The technical write-up is [`paper/main.pdf`](paper/main.pdf). Methods, caveats and every command are
+The technical write-up is [arXiv:2610.31833](https://arxiv.org/abs/2610.31833) (LaTeX source in [`paper/`](paper/)). Methods, caveats and every command are
 in [`docs/evaluation.md`](docs/evaluation.md).
 
 ## Quick start
@@ -371,6 +373,19 @@ scripts/                effort_check.py (does a provider honor the effort settin
                         build_hf_dataset.py (packages and uploads the Hugging Face dataset)
 paper/                  LaTeX source and PDF of the technical write-up
 docs/evaluation.md      full evaluation guide
+```
+
+## Citation
+
+```bibtex
+@misc{potash2026latentcoherence,
+  title         = {Latent Coherence: Do Frontier Language Models' Probability Judgments Obey the Law of Total Probability?},
+  author        = {Potash, Peter},
+  year          = {2026},
+  eprint        = {2610.31833},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2610.31833}
+}
 ```
 
 ## License
