@@ -231,3 +231,6 @@ runs/
 *.bak
 data/crossver_requests_preview.jsonl
 data/crossver_state.json
+
+# Hugging Face dataset build output
+hf_dataset/

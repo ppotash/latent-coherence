@@ -16,9 +16,12 @@ adjustment built from its own answers; [the causal version](#the-causal-version)
 both terms with an example. Every query also has an exact true answer, so incoherence and
 inaccuracy are measured separately.
 
-The motivation is LawZero's *Scientist AI* proposal (Bengio et al., 2025), which answers
-questions by averaging over hidden explanations of the evidence. That only works if the
-underlying probability judgments fit together in this way.
+The motivation is LawZero's *Scientist AI* (Bengio et al., 2025, 2026). Its Predictor is trained
+toward the Bayesian posterior, with an objective that penalizes inconsistent probabilities among
+hidden explanations of the evidence. A Predictor trained that way answers a question the same
+whether it answers directly or by averaging over the explanations, which is the law of total
+probability. This eval asks whether today's language models, with no such training, are already
+consistent in this sense zero-shot.
 
 ## A worked example
 
@@ -293,6 +296,16 @@ finish per item group.
 
 ## Dataset
 
+The dataset is on the Hugging Face Hub at
+[ppotash/latent-coherence](https://huggingface.co/datasets/ppotash/latent-coherence):
+
+```python
+from datasets import load_dataset
+
+items = load_dataset("ppotash/latent-coherence", "items", split="synthetic")   # or split="hover"
+prompts = load_dataset("ppotash/latent-coherence", "prompts", split="hover")   # one row per exact prompt
+```
+
 | family | records | hidden variable z |
 |---|---|---|
 | `source` | reports plus each source's track record | whether a source is careful or careless |
@@ -354,7 +367,8 @@ lc/engine.py, synth.py  exact true answers and synthetic generators
 lc/hover*.py, crossver.py  HoVer item construction and Claude cross-verification
 config/models.toml      model names, reasoning effort, prices
 scripts/                effort_check.py (does a provider honor the effort setting?), project_cost.py,
-                        paper_extras.py (the extra analyses in the write-up)
+                        paper_extras.py (the extra analyses in the write-up),
+                        build_hf_dataset.py (packages and uploads the Hugging Face dataset)
 paper/                  LaTeX source and PDF of the technical write-up
 docs/evaluation.md      full evaluation guide
 ```
@@ -367,5 +381,6 @@ Code: MIT. Data: CC BY-SA 4.0, since the HoVer items derive from HoVer (CC BY-SA
 
 - Bengio et al. (2025). *Superintelligent Agents Pose Catastrophic Risks: Can Scientist AI
   Offer a Safer Path?* arXiv:2502.15657.
+- Bengio et al. (2026). *Safety from Honesty in a Disinterested AI Predictor.* arXiv:2606.29657.
 - Jiang et al. (2020). *HoVer: A Dataset for Many-Hop Fact Extraction and Claim Verification.*
   Findings of EMNLP.
